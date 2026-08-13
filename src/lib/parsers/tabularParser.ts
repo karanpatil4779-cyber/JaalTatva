@@ -43,7 +43,7 @@ function numericCellCount(row: unknown[]): number {
 }
 
 function findHeaderRow(rows: unknown[][]): HeaderClass {
-  const scan = rows.slice(0, Math.min(12, rows.length));
+  const scan = rows.slice(0, Math.min(20, rows.length));
   let best: HeaderClass | null = null;
   scan.forEach((row, idx) => {
     const cls = classifyRow(row);

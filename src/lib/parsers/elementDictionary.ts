@@ -27,6 +27,8 @@ export function normalizeToken(input: string): string {
   return input.toLowerCase().replace(/[^a-z]/g, '');
 }
 
+const nameRegex = (name: string) => new RegExp(`\\b${name}\\b`, 'i');
+
 export function matchElement(raw: unknown): ElementEntry | null {
   const s = String(raw ?? '').trim().toLowerCase();
   if (!s) return null;
@@ -37,7 +39,7 @@ export function matchElement(raw: unknown): ElementEntry | null {
     if (e.symbol.toLowerCase() === norm) return e;
   }
   for (const e of ELEMENT_DICTIONARY) {
-    if (s.includes(e.name)) return e;
+    if (nameRegex(e.name).test(s)) return e;
   }
   for (const token of s.split(/[\s\-_()/:]+/)) {
     const tn = token.replace(/[^a-z]/g, '');
@@ -45,7 +47,7 @@ export function matchElement(raw: unknown): ElementEntry | null {
     for (const e of ELEMENT_DICTIONARY) {
       if (e.symbol.toLowerCase() === tn) return e;
       if (tn === e.name) return e;
-      if (tn.length >= 3 && e.name.includes(tn)) return e;
+      if (tn.length >= 3 && nameRegex(tn).test(e.name)) return e;
     }
   }
   return null;
@@ -119,8 +121,10 @@ const KEY_TO_FIELD: Record<string, keyof SampleInfo> = {
   date: 'date',
   collectiondate: 'date',
   sampledate: 'date',
+  samplingdate: 'date',
   'collection date': 'date',
   'sample date': 'date',
+  'sampling date': 'date',
 };
 
 const VALUE_LOOKS_OK = (val: string) =>
@@ -144,11 +148,18 @@ export function extractSampleInfo(rows: unknown[][]): SampleInfo {
     if (!row || row.length < 2) continue;
     if (row.some(cell => matchElement(cell))) continue;
     for (let i = 0; i < row.length - 1; i++) {
-      const key = normalizeToken(String(row[i]));
-      if (!key) continue;
+      const keyCell = String(row[i]).trim();
+      const key = normalizeToken(keyCell);
+      if (!key || !keyCell.endsWith(':')) continue;
       const target = KEY_TO_FIELD[key] || (key.includes('depth') ? 'depth' : null);
       if (!target || info[target]) continue;
-      const val = String(row[i + 1]).trim();
+      const rest: string[] = [];
+      for (let j = i + 1; j < row.length; j++) {
+        const cell = String(row[j]).trim();
+        if (cell.includes(':')) break;
+        rest.push(cell);
+      }
+      const val = rest.join(' ');
       if (VALUE_LOOKS_OK(val)) (info as unknown as Record<string, string>)[target] = val;
     }
   }
