@@ -6,11 +6,11 @@ import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid
 } from 'recharts';
-import { Beaker, FlaskConical, Plus, Zap, AlertTriangle, ArrowRight, RefreshCw, Sparkles, FileDown } from 'lucide-react';
+import { FlaskConical, Plus, Zap, AlertTriangle, ArrowRight, RefreshCw, Sparkles, FileDown } from 'lucide-react';
+import SmartUpload from './SmartUpload';
 
 const METALS = Object.keys(WHO_STANDARDS);
 
-const STATUS = { safe: { label: 'Safe', badge: 'badge-safe' }, moderate: { label: 'Moderate Risk', badge: 'badge-moderate' }, high: { label: 'High Risk', badge: 'badge-high' }, critical: { label: 'Critical', badge: 'badge-critical' } };
 const CLASS_COLORS = { safe: '#10b981', moderate: '#f59e0b', high: '#f97316', critical: '#dc2626' };
 
 const ChartTooltip = ({ active, payload, label }) => {
@@ -47,7 +47,7 @@ function MetalToggle({ metal, active, onToggle }) {
   );
 }
 
-function MetalInput({ metal, value, onChange }) {
+function MetalInput({ metal, value, onChange, fromUpload }) {
   const std = WHO_STANDARDS[metal];
   const color = METAL_COLORS[metal] || '#2563eb';
   const val = parseFloat(value) || 0;
@@ -55,7 +55,7 @@ function MetalInput({ metal, value, onChange }) {
   return (
     <div style={{
       background: exceeded ? '#fff5f5' : '#fafbfe',
-      border: `1.5px solid ${exceeded ? '#fca5a5' : '#e2e8f0'}`,
+      border: `1.5px solid ${exceeded ? '#fca5a5' : fromUpload ? '#99f6e4' : '#e2e8f0'}`,
       borderRadius: 12, padding: '12px 14px', transition: 'all 0.2s'
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -68,6 +68,12 @@ function MetalInput({ metal, value, onChange }) {
             padding: '2px 9px', borderRadius: 6
           }}>{metal}</span>
           <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>{std.name}</span>
+          {fromUpload && (
+            <span style={{
+              fontSize: 9, fontWeight: 800, color: '#0d9488', background: '#f0fdfa',
+              border: '1px solid #99f6e4', padding: '1px 6px', borderRadius: 6, letterSpacing: 0.3, whiteSpace: 'nowrap'
+            }}>from upload</span>
+          )}
         </div>
         {exceeded && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#dc2626', fontWeight: 700 }}>
@@ -95,6 +101,7 @@ export default function CalculatorTab({ onAddResult }) {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [uploadedMetals, setUploadedMetals] = useState(new Set());
 
   const updateConc = (metal, val) => setConcentrations(prev => ({ ...prev, [metal]: val }));
   const toggleMetal = (metal) => setSelectedMetals(prev => prev.includes(metal) ? prev.filter(m => m !== metal) : [...prev, metal]);
@@ -126,7 +133,27 @@ export default function CalculatorTab({ onAddResult }) {
     }, 700);
   };
 
-  const reset = () => { setConcentrations({}); setResult(null); };
+  const reset = () => { setConcentrations({}); setResult(null); setUploadedMetals(new Set()); };
+
+  const applyUpload = (res) => {
+    const concs = {};
+    res.elements.forEach(e => { concs[e.symbol] = String(e.value); });
+    const symbols = res.elements.map(e => e.symbol);
+    setConcentrations(prev => ({ ...prev, ...concs }));
+    setSelectedMetals(prev => Array.from(new Set([...prev, ...symbols])));
+    setUploadedMetals(new Set(symbols));
+    const info = res.sampleInfo;
+    if (info && Object.keys(info).length) {
+      setSampleInfo(prev => ({
+        ...prev,
+        id: info.id || prev.id,
+        location: info.location || prev.location,
+        depth: info.depth || prev.depth,
+        source_type: info.source_type || prev.source_type,
+        date: info.date || prev.date,
+      }));
+    }
+  };
 
   const radarData = result ? Object.entries(result.hmpi?.Qn_values || {}).map(([metal, qn]) => ({ metal, Qn: Math.min(qn, 500), Limit: 100 })) : [];
   const barData = result ? Object.entries(concentrations).filter(([m]) => selectedMetals.includes(m)).map(([metal, val]) => {
@@ -193,6 +220,9 @@ export default function CalculatorTab({ onAddResult }) {
         </div>
       </div>
 
+      {/* ── SMART UPLOAD ─────────────────────────────────── */}
+      <SmartUpload onApply={applyUpload} />
+
       {/* ── INPUT GRID ─────────────────────────────────── */}
       <div className="grid-2 mb-24">
         {/* Sample Info */}
@@ -254,7 +284,7 @@ export default function CalculatorTab({ onAddResult }) {
 
           <div style={{ maxHeight: 360, overflowY: 'auto', paddingRight: 4, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {selectedMetals.map(m => (
-              <MetalInput key={m} metal={m} value={concentrations[m] || ''} onChange={updateConc} />
+              <MetalInput key={m} metal={m} value={concentrations[m] || ''} onChange={updateConc} fromUpload={uploadedMetals.has(m)} />
             ))}
             {selectedMetals.length === 0 && (
               <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-400)', fontSize: 14 }}>
